@@ -1,0 +1,43 @@
+name: Mirror Vercel Site
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 * * * *"  # hourly at :17; change if you want
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install wget
+        run: sudo apt-get update && sudo apt-get install -y wget
+
+      - name: Clean old snapshot (keep workflow)
+        run: |
+          find . -maxdepth 1 ! -name ".git" ! -name ".github" -exec rm -rf {} +
+
+      - name: Mirror site
+        env:
+          TARGET: https://cv-gamma-weld.vercel.app/
+        run: |
+          wget --mirror --convert-links --adjust-extension --page-requisites --no-parent \
+               --compression=auto --execute robots=off \
+               "$TARGET"
+          folder=$(echo "$TARGET" | sed -E 's#https?://##; s#/$##')
+          shopt -s dotglob
+          mv "$folder"/* .
+          rmdir "$folder" || true
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Auto-mirror update"
+            git push
+          else
+            echo "No changes."
+          fi
